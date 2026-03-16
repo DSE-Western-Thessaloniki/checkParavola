@@ -2,6 +2,7 @@
 import PyPDF2
 import os
 import re
+import unicodedata
 from optparse import OptionParser
 from termcolor import colored
 
@@ -92,26 +93,47 @@ def check_root(directory):
         print(e.strerror, ': \'', e.filename, '\'', sep='')
 
 
+def normalize_name(value: str) -> str:
+    """Normalize names extracted from the PDFs.
+
+    - Trim leading/trailing whitespace
+    - Replace hyphens with spaces
+    - Collapse runs of whitespace to a single space
+    - Strip accent marks (Greek and other languages)
+    """
+    if value is None:
+        return value
+
+    # Normalize whitespace/hyphens first so accent stripping doesn't reintroduce extra spaces.
+    value = value.strip().replace('-', ' ')
+    value = re.sub(r"\s+", " ", value)
+
+    # Strip combining diacritics (accents) from letters.
+    normalized = unicodedata.normalize("NFD", value)
+    stripped = "".join(ch for ch in normalized if unicodedata.category(ch) != "Mn")
+    return unicodedata.normalize("NFC", stripped)
+
+
 def read_id_from_paravolo(text):
     id = ID()
     match = re.search(r"Όνομα:\s+(.+)", text)
-    id.name = match.group(1)
+    id.name = normalize_name(match.group(1))
     match = re.search(r"Επώνυμο:\s+(.+)", text)
-    id.surname = match.group(1)
+    id.surname = normalize_name(match.group(1))
     match = re.search(r"Πατρώνυμο:\s+(.+)", text)
-    id.fathers_name = match.group(1)
+    id.fathers_name = normalize_name(match.group(1))
     match = re.search(r"Μητρώνυμο:\s+(.+)", text)
-    id.mothers_name = match.group(1)
+    id.mothers_name = normalize_name(match.group(1))
     return id
 
 
 def read_id_from_deltio(text):
     id = ID()
     match = re.search(r"ΚΩΔΙΚΟΣ ΥΠΟΨΗΦΙΟΥ\n(.+)\n(.+)\n(.+)\n(.+)", text)
-    id.surname = match.group(1)
-    id.name = match.group(2)
-    id.fathers_name = match.group(3)
-    id.mothers_name = match.group(4)
+    id.surname = normalize_name(match.group(1))
+    id.name = normalize_name(match.group(2))
+    id.fathers_name = normalize_name(match.group(3))
+    id.mothers_name = normalize_name(match.group(4))
     return id
 
 
