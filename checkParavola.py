@@ -49,20 +49,23 @@ def check_folder(directory):
     paravolo_found = False
     deltio_found = False
     desmeush_found = False
-    paravolo_ids = []  # list of tuples (ID, filename)
+    paravolo_entries = []  # list of tuples (ID, filename, text)
     deltio_id = ID()
+    deltio_text = None
     try:
         with os.scandir(directory) as it:
             for entry in it:
                 if entry.name.startswith("KPG-Deltio"):
                     deltio_found = True
-                    deltio_id = read_id_from_deltio(getPDF(entry))
+                    deltio_text = getPDF(entry)
+                    deltio_id = read_id_from_deltio(deltio_text)
 
                 if entry.name.startswith("viewParavolo"):
                     paravolo_found = True
                     if check_desmeush(entry):
                         desmeush_found = True
-                        paravolo_ids.append((read_id_from_paravolo(getPDF(entry)), entry.name))
+                        text = getPDF(entry)
+                        paravolo_entries.append((read_id_from_paravolo(text), entry.name, text))
 
     except PermissionError as e:
         print(e.strerror, ': \'', e.filename, '\'', sep='')
@@ -81,13 +84,35 @@ def check_folder(directory):
             return
 
         # Ensure every committed paravolo matches the deltio.
-        mismatches = [(p, f) for p, f in paravolo_ids if not check_ids(p, deltio_id)]
+        mismatches = [(p, f) for p, f, _ in paravolo_entries if not check_ids(p, deltio_id)]
         if mismatches:
             print(colored(
                 f"Δεν ταιριάζουν τα στοιχεία δελτίου-παραβόλου στον φάκελο {directory}...", "yellow"))
             for paravolo_id, filename in mismatches:
                 print(f"Παράβολο ({filename}): {paravolo_id}")
             print(f"Δελτίο: {deltio_id}")
+
+        # Check that the deltio level matches a committed viewParavolo file.
+        levels = extract_deltio_levels(deltio_text)
+        if not levels:
+            print(colored(
+                f"Το δελτίο {directory} δεν περιέχει κάποιο από τα απαιτούμενα κείμενα επιπέδων (Α, Β, Γ).", "yellow"))
+        else:
+            level_to_expected = {
+                "Επίπεδο Α (Α1 + Α2)": "Για κοινό διαβαθμισμένο test επιπέδων Α1-Α2",
+                "Επίπεδο Β (Β1 + Β2)": "Για κοινό διαβαθμισμένο test επιπέδων Β1-Β2",
+                "Επίπεδο Γ (Γ1 + Γ2)": "Για κοινό διαβαθμισμένο test επιπέδων Γ1-Γ2",
+            }
+
+            for level in sorted(levels):
+                expected = level_to_expected.get(level)
+                if expected is None:
+                    continue
+                found = any(re.search(re.escape(expected), text) for _, _, text in paravolo_entries)
+                if not found:
+                    print(colored(
+                        f"Το δελτίο περιέχει '{level}' αλλά δεν βρέθηκε αντίστοιχο αρχείο viewParavolo με '{expected}' στον φάκελο {directory}.",
+                        "yellow"))
 
 
 def check_root(directory):
@@ -145,6 +170,32 @@ def read_id_from_deltio(text):
     id.fathers_name = normalize_name(match.group(3))
     id.mothers_name = normalize_name(match.group(4))
     return id
+
+
+def extract_deltio_levels(text):
+    """Extract the declared level(s) from a KPG-Deltio document.
+
+    The deltio should contain one or more of the following phrases:
+      - Επίπεδο Α (Α1 + Α2)
+      - Επίπεδο Β (Β1 + Β2)
+      - Επίπεδο Γ (Γ1 + Γ2)
+
+    Returns the set of matching phrases found.
+    """
+    if not text:
+        return set()
+
+    patterns = {
+        "Επίπεδο Α (Α1 + Α2)": r"Επίπεδο\s*Α\s*\(\s*Α1\s*\+\s*Α2\s*\)",
+        "Επίπεδο Β (Β1 + Β2)": r"Επίπεδο\s*Β\s*\(\s*Β1\s*\+\s*Β2\s*\)",
+        "Επίπεδο Γ (Γ1 + Γ2)": r"Επίπεδο\s*Γ\s*\(\s*Γ1\s*\+\s*Γ2\s*\)",
+    }
+
+    found = set()
+    for label, pat in patterns.items():
+        if re.search(pat, text):
+            found.add(label)
+    return found
 
 
 def check_ids(id1, id2):
