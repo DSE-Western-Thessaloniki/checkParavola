@@ -49,19 +49,21 @@ def check_folder(directory):
     paravolo_found = False
     deltio_found = False
     desmeush_found = False
-    paravolo_id = ID()
+    paravolo_ids = []  # list of tuples (ID, filename)
     deltio_id = ID()
     try:
         with os.scandir(directory) as it:
             for entry in it:
-                if (entry.name.startswith("KPG-Deltio")):
+                if entry.name.startswith("KPG-Deltio"):
                     deltio_found = True
                     deltio_id = read_id_from_deltio(getPDF(entry))
-                if (entry.name.startswith("viewParavolo")):
+
+                if entry.name.startswith("viewParavolo"):
                     paravolo_found = True
                     if check_desmeush(entry):
                         desmeush_found = True
-                        paravolo_id = read_id_from_paravolo(getPDF(entry))
+                        paravolo_ids.append((read_id_from_paravolo(getPDF(entry)), entry.name))
+
     except PermissionError as e:
         print(e.strerror, ': \'', e.filename, '\'', sep='')
 
@@ -70,14 +72,22 @@ def check_folder(directory):
     elif desmeush_found is False:
         print(colored(
             f"Το παράβολο στον φάκελο {directory} δεν έχει γίνει δέσμευση!!!", "red"))
+
     if deltio_found is False:
         print(colored(f"Δεν βρέθηκε το δελτίο εξεταζομένου στον φάκελο {directory}...", "cyan"))
 
-    if paravolo_found and deltio_found and not check_ids(paravolo_id, deltio_id):
-        print(colored(
-            f"Δεν ταιριάζουν τα στοιχεία δελτίου-παραβόλου στον φάκελο {directory}...", "yellow"))
-        print(f"Παράβολο: {paravolo_id}")
-        print(f"Δελτίο: {deltio_id}")
+    if paravolo_found and deltio_found:
+        if not desmeush_found:
+            return
+
+        # Ensure every committed paravolo matches the deltio.
+        mismatches = [(p, f) for p, f in paravolo_ids if not check_ids(p, deltio_id)]
+        if mismatches:
+            print(colored(
+                f"Δεν ταιριάζουν τα στοιχεία δελτίου-παραβόλου στον φάκελο {directory}...", "yellow"))
+            for paravolo_id, filename in mismatches:
+                print(f"Παράβολο ({filename}): {paravolo_id}")
+            print(f"Δελτίο: {deltio_id}")
 
 
 def check_root(directory):
@@ -154,8 +164,8 @@ def check_ids(id1, id2):
 
     # Έλεγχος αν κατέθεσε ο πατέρας το παράβολο
     equal = True
-    if id1.surname != id2.surname:
-        equal = False
+    # if id1.surname != id2.surname:
+    #     equal = False
     if id1.name != id2.fathers_name:
         equal = False
 
