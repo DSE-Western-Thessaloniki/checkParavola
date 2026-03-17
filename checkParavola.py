@@ -198,6 +198,41 @@ def extract_deltio_levels(text):
     return found
 
 
+def surnames_match(s1: str, s2: str) -> bool:
+    """Compare Greek surnames, accepting common feminine/male suffix variants.
+
+    The normalized IDs are expected to be uppercase and accent-free, so we can
+    compare them directly and only handle a few common gendered suffix changes.
+    """
+
+    if s1 is None or s2 is None:
+        return False
+
+    if s1 == s2:
+        return True
+
+    # Common male->female suffix mappings (assuming uppercase input).
+    suffix_pairs = [
+        ("ΟΣ", "ΟΥ"),
+        ("ΗΣ", "Η"),
+        ("ΗΣ", "ΟΥ"),
+        ("ΑΣ", "Α"),
+        ("ΕΣ", "ΕΑ"),
+    ]
+
+    for male, female in suffix_pairs:
+        if s1.endswith(male) and s2 == s1[:-len(male)] + female:
+            return True
+        if s2.endswith(male) and s1 == s2[:-len(male)] + female:
+            return True
+        if s1.endswith(female) and s2 == s1[:-len(female)] + male:
+            return True
+        if s2.endswith(female) and s1 == s2[:-len(female)] + male:
+            return True
+
+    return False
+
+
 def check_ids(id1, id2):
     equal = True
 
@@ -215,8 +250,8 @@ def check_ids(id1, id2):
 
     # Έλεγχος αν κατέθεσε ο πατέρας το παράβολο
     equal = True
-    # if id1.surname != id2.surname:
-    #     equal = False
+    if not surnames_match(id1.surname, id2.surname):
+        equal = False
     if id1.name != id2.fathers_name:
         equal = False
 
