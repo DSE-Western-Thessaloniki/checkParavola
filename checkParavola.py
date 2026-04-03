@@ -46,12 +46,18 @@ def check_desmeush(file_entry: os.DirEntry[str]):
 
 
 def check_folder(directory):
-    paravolo_found = False
+    paravolo_payment_found = False
     deltio_found = False
     desmeush_found = False
+    id_found = False
+    paravolo_found = False
     paravolo_entries = []  # list of tuples (ID, filename, text)
     deltio_id = ID()
     deltio_text = None
+
+    file_prefix = directory.split('/')[-1].split(' ')[1:]
+    file_prefix = file_prefix[0] + ' ' + file_prefix[1][0] + '._' if len(file_prefix) > 0 else ''
+
     try:
         with os.scandir(directory) as it:
             for entry in it:
@@ -61,16 +67,22 @@ def check_folder(directory):
                     deltio_id = read_id_from_deltio(deltio_text)
 
                 if entry.name.startswith("viewParavolo"):
-                    paravolo_found = True
+                    paravolo_payment_found = True
                     if check_desmeush(entry):
                         desmeush_found = True
                         text = getPDF(entry)
                         paravolo_entries.append((read_id_from_paravolo(text), entry.name, text))
+                
+                if entry.name == f"{file_prefix}ΠΑΡΑΒΟΛΟ.pdf":
+                    paravolo_found = True
+                
+                if entry.name == f"{file_prefix}ΤΑΥΤΟΠΡΟΣΩΠΙΑ.pdf":
+                    id_found = True
 
     except PermissionError as e:
         print(e.strerror, ': \'', e.filename, '\'', sep='')
 
-    if paravolo_found is False:
+    if paravolo_payment_found is False:
         print(colored(f"Δεν βρέθηκε παράβολο στον φάκελο {directory}...", "red"))
     elif desmeush_found is False:
         print(colored(
@@ -78,8 +90,14 @@ def check_folder(directory):
 
     if deltio_found is False:
         print(colored(f"Δεν βρέθηκε το δελτίο εξεταζομένου στον φάκελο {directory}...", "cyan"))
+    
+    if paravolo_found is False:
+        print(colored(f"Δεν βρέθηκε αρχείο αποδεικτικού παραβόλου στον φάκελο {directory}...", "yellow"))
+    
+    if id_found is False:
+        print(colored(f"Δεν βρέθηκε αρχείο ταυτοπροσωπίας στον φάκελο {directory}...", "yellow"))
 
-    if paravolo_found and deltio_found:
+    if paravolo_payment_found and deltio_found:
         if not desmeush_found:
             return
 
